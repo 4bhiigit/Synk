@@ -1,0 +1,30 @@
+# Environment & Secrets
+.env
+*.env.local
+*.env.*.local
+!*.env.example
+
+# Python & Django
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+db.sqlite3
+/backend/db.sqlite3
+/backend/staticfiles/
+/backend/media/
+
+# Node & Frontend
+node_modules/
+/frontend/node_modules/
+dist/
+/frontend/dist/
+.vite/
+/frontend/.vite/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

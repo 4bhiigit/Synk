@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexus_chat_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nexus_chat_db
+      POSTGRES_USER: nexus_user
+      POSTGRES_PASSWORD: nexus_secure_password_change_me
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus_user -d nexus_chat_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nexus_network
+
+  # 2. Redis Channel Layer
+  redis:
+    image: redis:7-alpine
+    container_name: nexus_chat_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nexus_network
+
+  # 3. Daphne ASGI & Django Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: nexus_chat_backend
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: django-insecure-prod-key-change-in-environment-settings
+      DEBUG: "False"
+      ALLOWED_HOSTS: "*"
+      DATABASE_URL: postgres://nexus_user:nexus_secure_password_change_me@postgres:5432/nexus_chat_db
+      REDIS_URL: redis://redis:6379/0
+      CORS_ALLOW_ALL_ORIGINS: "True"
+    volumes:
+      - backend_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nexus_network
+
+  # 4. Frontend Nginx Reverse Proxy & Client
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: nexus_chat_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - nexus_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_media:
+
+networks:
+  nexus_network:
+    driver: bridge
