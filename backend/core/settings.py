@@ -164,9 +164,11 @@ REDIS_URL = os.environ.get('REDIS_URL', UPSTASH_REDIS_FALLBACK)
 if REDIS_URL:
     CHANNEL_LAYERS = {
         'default': {
-            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'BACKEND': 'channels_redis.pubsub.RedisPubSubChannelLayer',
             'CONFIG': {
                 'hosts': [REDIS_URL],
+                'capacity': 3000,
+                'expiry': 60,
             },
         },
     }

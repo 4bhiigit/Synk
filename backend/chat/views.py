@@ -1,6 +1,9 @@
 import os
+import json
 import uuid
 from django.conf import settings
+from django.utils import timezone
+from django.core.serializers.json import DjangoJSONEncoder
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.db.models import Q, Sum
@@ -103,13 +106,14 @@ class CreatePollView(APIView):
         try:
             channel_layer = get_channel_layer()
             if channel_layer:
+                clean_msg = json.loads(json.dumps(serialized_msg, cls=DjangoJSONEncoder))
                 async_to_sync(channel_layer.group_send)(
                     f'chat_{room.id}',
                     {
                         'type': 'chat_message_handler',
                         'data': {
                             'type': 'message',
-                            'message': serialized_msg,
+                            'message': clean_msg,
                         }
                     }
                 )
@@ -160,6 +164,7 @@ class VotePollView(APIView):
         try:
             channel_layer = get_channel_layer()
             if channel_layer:
+                clean_poll = json.loads(json.dumps(serialized_poll, cls=DjangoJSONEncoder))
                 async_to_sync(channel_layer.group_send)(
                     f'chat_{poll.room_id}',
                     {
@@ -167,7 +172,7 @@ class VotePollView(APIView):
                         'data': {
                             'type': 'poll_vote_update',
                             'poll_id': str(poll.id),
-                            'poll': serialized_poll,
+                            'poll': clean_poll,
                         }
                     }
                 )
@@ -196,6 +201,7 @@ class ClosePollView(APIView):
         try:
             channel_layer = get_channel_layer()
             if channel_layer:
+                clean_poll = json.loads(json.dumps(serialized_poll, cls=DjangoJSONEncoder))
                 async_to_sync(channel_layer.group_send)(
                     f'chat_{poll.room_id}',
                     {
@@ -203,7 +209,7 @@ class ClosePollView(APIView):
                         'data': {
                             'type': 'poll_vote_update',
                             'poll_id': str(poll.id),
-                            'poll': serialized_poll,
+                            'poll': clean_poll,
                         }
                     }
                 )
@@ -241,13 +247,14 @@ class PinMessageView(APIView):
             channel_layer = get_channel_layer()
             if channel_layer:
                 pinned_list = [MessageSerializer(m, context={'request': request}).data for m in room.pinned_messages.all()]
+                clean_pinned = json.loads(json.dumps(pinned_list, cls=DjangoJSONEncoder))
                 async_to_sync(channel_layer.group_send)(
                     f'chat_{room.id}',
                     {
                         'type': 'chat_pinned_message_handler',
                         'data': {
                             'type': 'pinned_messages_update',
-                            'pinned_messages': pinned_list,
+                            'pinned_messages': clean_pinned,
                         }
                     }
                 )
