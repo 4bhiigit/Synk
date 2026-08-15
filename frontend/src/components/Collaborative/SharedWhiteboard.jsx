@@ -60,26 +60,47 @@ export const SharedWhiteboard = ({
     ctx.restore();
   }, []);
 
-  // Initialize Canvas context
+  const allStrokesRef = useRef([]);
+
+  // Initialize Canvas context and replay strokes
   useEffect(() => {
     if (!isOpen) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const timer = setTimeout(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
 
-    const ctx = canvas.getContext('2d');
-    ctx.scale(2, 2);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    contextRef.current = ctx;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      contextRef.current = ctx;
 
-    const dataUrl = canvas.toDataURL();
-    setHistory([dataUrl]);
-  }, [isOpen]);
+      // Replay all strokes
+      if (allStrokesRef.current && allStrokesRef.current.length > 0) {
+        allStrokesRef.current.forEach((stroke) => {
+          drawSegment(
+            stroke.prevX,
+            stroke.prevY,
+            stroke.currX,
+            stroke.currY,
+            stroke.color,
+            stroke.width,
+            stroke.isEraser
+          );
+        });
+      }
+
+      const dataUrl = canvas.toDataURL();
+      setHistory([dataUrl]);
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, drawSegment]);
 
   const saveToHistory = () => {
     const canvas = canvasRef.current;
@@ -90,6 +111,7 @@ export const SharedWhiteboard = ({
 
   const flushStrokes = useCallback(() => {
     if (strokeBufferRef.current.length > 0) {
+      allStrokesRef.current.push(...strokeBufferRef.current);
       onSendCanvasDraw([...strokeBufferRef.current]);
       strokeBufferRef.current = [];
     }
@@ -122,61 +144,74 @@ export const SharedWhiteboard = ({
   const draw = (e) => {
     if (!isDrawingRef.current) return;
     const { x, y } = getCoordinates(e);
-    const prev = lastPosRef.current;
-
     const isEraser = activeTool === 'eraser';
-    drawSegment(prev.x, prev.y, x, y, color, lineWidth, isEraser);
 
-    strokeBufferRef.current.push({
-      prevX: prev.x,
-      prevY: prev.y,
+    drawSegment(
+      lastPosRef.current.x,
+      lastPosRef.current.y,
+      x,
+      y,
+      color,
+      lineWidth,
+      isEraser
+    );
+
+    const stroke = {
+      prevX: lastPosRef.current.x,
+      prevY: lastPosRef.current.y,
       currX: x,
       currY: y,
       color: color,
       width: lineWidth,
       isEraser: isEraser,
-    });
+    };
 
+    strokeBufferRef.current.push(stroke);
+    allStrokesRef.current.push(stroke);
     lastPosRef.current = { x, y };
   };
 
   const stopDrawing = () => {
-    if (isDrawingRef.current) {
-      isDrawingRef.current = false;
-      flushStrokes();
-      if (throttleTimerRef.current) {
-        clearInterval(throttleTimerRef.current);
-        throttleTimerRef.current = null;
-      }
-      saveToHistory();
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    flushStrokes();
+
+    if (throttleTimerRef.current) {
+      clearInterval(throttleTimerRef.current);
+      throttleTimerRef.current = null;
     }
+
+    saveToHistory();
   };
 
   const handleClear = () => {
     const canvas = canvasRef.current;
     const ctx = contextRef.current;
-    if (!canvas || !ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    onSendCanvasClear();
-    saveToHistory();
+    if (canvas && ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      allStrokesRef.current = [];
+      saveToHistory();
+      if (onSendCanvasClear) {
+        onSendCanvasClear();
+      }
+    }
   };
 
   const handleUndo = () => {
     if (history.length <= 1) return;
-    const newHistory = [...history];
-    newHistory.pop();
-    const previousState = newHistory[newHistory.length - 1];
+    const newHistory = history.slice(0, -1);
+    const lastState = newHistory[newHistory.length - 1];
 
     const img = new Image();
-    img.src = previousState;
+    img.src = lastState;
     img.onload = () => {
       const canvas = canvasRef.current;
       const ctx = contextRef.current;
-      if (!canvas || !ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width / 2, canvas.height / 2);
-      setHistory(newHistory);
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width / 2, canvas.height / 2);
+        setHistory(newHistory);
+      }
     };
   };
 
@@ -196,6 +231,7 @@ export const SharedWhiteboard = ({
 
     const unsubDraw = subscribe('canvas_draw', (payload) => {
       const strokes = payload.strokes || [];
+      allStrokesRef.current.push(...strokes);
       strokes.forEach((stroke) => {
         drawSegment(
           stroke.prevX,
@@ -210,6 +246,7 @@ export const SharedWhiteboard = ({
     });
 
     const unsubClear = subscribe('canvas_clear', () => {
+      allStrokesRef.current = [];
       const canvas = canvasRef.current;
       const ctx = contextRef.current;
       if (canvas && ctx) {

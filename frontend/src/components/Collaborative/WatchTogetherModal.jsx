@@ -19,12 +19,14 @@ export const WatchTogetherModal = ({
   isOpen,
   onClose,
   currentUsername,
+  activeVideoId = null,
+  activeVideoUrl = '',
   onSendVideoLoad,
   onSendVideoSync,
   subscribe,
 }) => {
-  const [videoUrlInput, setVideoUrlInput] = useState('');
-  const [currentVideoId, setCurrentVideoId] = useState(null);
+  const [videoUrlInput, setVideoUrlInput] = useState(activeVideoUrl || '');
+  const [currentVideoId, setCurrentVideoId] = useState(activeVideoId);
   const [isPlaying, setIsPlaying] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Ready');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -67,31 +69,56 @@ export const WatchTogetherModal = ({
       }
     };
 
-    if (window.YT && window.YT.Player) {
-      if (playerRef.current && playerRef.current.destroy) {
-        playerRef.current.destroy();
-      }
+    const mountYT = () => {
+      if (window.YT && window.YT.Player && document.getElementById('yt-player-container')) {
+        if (playerRef.current && playerRef.current.destroy) {
+          try {
+            playerRef.current.destroy();
+          } catch (e) {}
+        }
 
-      playerRef.current = new window.YT.Player('yt-player-container', {
-        height: '100%',
-        width: '100%',
-        videoId: videoId,
-        playerVars: {
-          autoplay: 1,
-          controls: 1,
-          modestbranding: 1,
-          rel: 0,
-          fs: 1,
-        },
-        events: {
-          onReady: onPlayerReady,
-          onStateChange: onPlayerStateChange,
-        },
-      });
-    } else {
-      window.onYouTubeIframeAPIReady = () => initPlayer(videoId, startSeconds);
-    }
+        playerRef.current = new window.YT.Player('yt-player-container', {
+          height: '100%',
+          width: '100%',
+          videoId: videoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 1,
+            modestbranding: 1,
+            rel: 0,
+            fs: 1,
+          },
+          events: {
+            onReady: onPlayerReady,
+            onStateChange: onPlayerStateChange,
+          },
+        });
+      } else {
+        window.onYouTubeIframeAPIReady = () => mountYT();
+      }
+    };
+
+    mountYT();
   }, [onSendVideoSync]);
+
+  useEffect(() => {
+    if (activeVideoId && activeVideoId !== currentVideoId) {
+      setCurrentVideoId(activeVideoId);
+    }
+    if (activeVideoUrl && !videoUrlInput) {
+      setVideoUrlInput(activeVideoUrl);
+    }
+  }, [activeVideoId, activeVideoUrl]);
+
+  useEffect(() => {
+    if (isOpen && (currentVideoId || activeVideoId)) {
+      const vid = currentVideoId || activeVideoId;
+      const timer = setTimeout(() => {
+        initPlayer(vid, 0);
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, currentVideoId, activeVideoId, initPlayer]);
 
   const handleStartSession = (e) => {
     e.preventDefault();

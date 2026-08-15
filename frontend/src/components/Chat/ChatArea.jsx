@@ -89,6 +89,7 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
 
   // Modals & Viewers
   const [isWatchModalOpen, setIsWatchModalOpen] = useState(false);
+  const [activeWatchSession, setActiveWatchSession] = useState(null);
   const [isWhiteboardOpen, setIsWhiteboardOpen] = useState(false);
   const [isBalanceSheetOpen, setIsBalanceSheetOpen] = useState(false);
   const [isCapsuleModalOpen, setIsCapsuleModalOpen] = useState(false);
@@ -218,15 +219,30 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
   // Ambient Sentiment Aura Tone
   const sentimentTone = useMemo(() => detectSentimentTone(messages), [messages]);
 
-  // Listen to video_load / canvas_draw to automatically open modal if needed
+  // Listen to video_load / canvas_draw to automatically open modal and track sessions
   useEffect(() => {
     if (!subscribe) return;
 
-    const unsubVideo = subscribe('video_load', () => setIsWatchModalOpen(true));
-    const unsubDraw = subscribe('canvas_draw', () => setIsWhiteboardOpen(true));
+    const unsubVideo = subscribe('video_load', (payload) => {
+      if (payload && (payload.video_id || payload.video_url)) {
+        setActiveWatchSession(payload);
+        setIsWatchModalOpen(true);
+      }
+    });
+
+    const unsubVideoSync = subscribe('video_sync', (payload) => {
+      if (payload) {
+        setActiveWatchSession((prev) => prev || { title: 'YouTube Watch Party' });
+      }
+    });
+
+    const unsubDraw = subscribe('canvas_draw', () => {
+      setIsWhiteboardOpen(true);
+    });
 
     return () => {
       unsubVideo();
+      unsubVideoSync();
       unsubDraw();
     };
   }, [subscribe]);
@@ -266,6 +282,16 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
   const handleSendMessage = (content, mediaUrl, replyToId, messageType = 'text', isViewOnce = false) => {
     playSentSound();
 
+    let actualMessageType = messageType;
+    if (content && typeof content === 'string') {
+      const lower = content.trim().toLowerCase();
+      if (lower.startsWith('/game tictactoe') || lower === '/tictactoe') {
+        actualMessageType = 'game_card';
+      } else if (lower.startsWith('/split') || lower.startsWith('/expense')) {
+        actualMessageType = 'expense_card';
+      }
+    }
+
     // ⚡ Optimistic UI Update: Render message instantly on screen (0ms latency!)
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const optimisticMsg = {
@@ -273,7 +299,7 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
       temp_id: tempId,
       content: content,
       media_url: mediaUrl,
-      message_type: messageType,
+      message_type: actualMessageType,
       is_view_once: isViewOnce,
       created_at: new Date().toISOString(),
       sender: {
@@ -295,7 +321,7 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
-    sendMessage(content, mediaUrl, replyToId, messageType, isViewOnce);
+    sendMessage(content, mediaUrl, replyToId, actualMessageType, isViewOnce);
     if (onMessageSent) onMessageSent();
   };
 
@@ -769,6 +795,41 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
         onUnpinMessage={handlePinMessage}
         isAdmin={activeRoom.is_admin}
       />
+
+      {/* Active Watch Party Session Banner */}
+      {activeWatchSession && !isWatchModalOpen && (
+        <div className="mx-4 mt-2 p-2.5 rounded-2xl bg-[#141418] border border-red-500/30 flex items-center justify-between animate-slide-up shadow-lg flex-shrink-0 select-none">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <div className="p-2 rounded-xl bg-red-500/20 text-red-400 flex-shrink-0">
+              <Tv className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-white">Watch Party Active</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+              </div>
+              <p className="text-[11px] text-zinc-400 truncate max-w-xs sm:max-w-md">
+                {activeWatchSession.title || 'YouTube Watch Together'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setIsWatchModalOpen(true)}
+              className="btn-primary px-3 py-1 text-xs font-bold shadow-md active:scale-95"
+            >
+              Join Party
+            </button>
+            <button
+              onClick={() => setActiveWatchSession(null)}
+              className="p-1 rounded-lg text-zinc-500 hover:text-white"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Screen Share Live Viewer */}
       {activeScreenStream && (
@@ -1331,7 +1392,12 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
         isOpen={isWatchModalOpen}
         onClose={() => setIsWatchModalOpen(false)}
         currentUsername={user?.username}
-        onSendVideoLoad={sendVideoLoad}
+        activeVideoId={activeWatchSession?.video_id || activeWatchSession?.videoId}
+        activeVideoUrl={activeWatchSession?.video_url || activeWatchSession?.videoUrl}
+        onSendVideoLoad={(url, vid, title) => {
+          setActiveWatchSession({ video_id: vid, video_url: url, title });
+          sendVideoLoad(url, vid, title);
+        }}
         onSendVideoSync={sendVideoSync}
         subscribe={subscribe}
       />
