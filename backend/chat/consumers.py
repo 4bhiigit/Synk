@@ -8,8 +8,8 @@ from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
-from .models import ChatRoom, Message, Expense, ExpenseSplit, MessageReaction
-from .serializers import ExpenseSerializer
+from .models import ChatRoom, Message, Expense, ExpenseSplit, MessageReaction, Poll, PollOption, PollVote
+from .serializers import ExpenseSerializer, PollSerializer, MessageSerializer
 
 User = get_user_model()
 
@@ -514,6 +514,41 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
 
+        # 14b. Interactive Live Poll Voting
+        elif event_type == 'poll_vote':
+            poll_id = payload.get('poll_id')
+            option_id = payload.get('option_id')
+            if poll_id and option_id:
+                updated_poll_data = await self.record_poll_vote(poll_id, option_id, self.user)
+                if updated_poll_data:
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'chat_poll_vote_handler',
+                            'data': {
+                                'type': 'poll_vote_update',
+                                'poll_id': str(poll_id),
+                                'poll': updated_poll_data,
+                            }
+                        }
+                    )
+
+        # 14c. Pinned Messages
+        elif event_type == 'pin_message':
+            message_id = payload.get('message_id')
+            if message_id:
+                pinned_list = await self.toggle_pin_message(self.room_id, message_id, self.user)
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_pinned_message_handler',
+                        'data': {
+                            'type': 'pinned_messages_update',
+                            'pinned_messages': pinned_list,
+                        }
+                    }
+                )
+
         # 15. Watch Together
         elif event_type == 'video_load':
             video_url = payload.get('video_url')
@@ -858,8 +893,43 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return reactions_dict
         except Exception as e:
             import traceback
-            traceback.print_exc()
+    @database_sync_to_async
+    def record_poll_vote(self, poll_id, option_id, user):
+        try:
+            poll = Poll.objects.get(id=poll_id)
+            if poll.is_closed:
+                return None
+            option = PollOption.objects.get(id=option_id, poll=poll)
+            user_obj = User.objects.get(id=user.id)
+
+            existing = PollVote.objects.filter(poll=poll, user=user_obj).first()
+            if existing:
+                if str(existing.option_id) == str(option.id):
+                    existing.delete()
+                else:
+                    existing.option = option
+                    existing.save(update_fields=['option'])
+            else:
+                PollVote.objects.create(poll=poll, option=option, user=user_obj)
+
+            return PollSerializer(poll, context={'user': user_obj}).data
+        except Exception as e:
+            print("Poll vote error:", e)
             return None
+
+    @database_sync_to_async
+    def toggle_pin_message(self, room_id, message_id, user):
+        try:
+            room = ChatRoom.objects.get(id=room_id)
+            msg = Message.objects.get(id=message_id, room=room)
+            if room.pinned_messages.filter(id=msg.id).exists():
+                room.pinned_messages.remove(msg)
+            else:
+                room.pinned_messages.add(msg)
+            return [MessageSerializer(m).data for m in room.pinned_messages.all()]
+        except Exception as e:
+            print("Toggle pin error:", e)
+            return []
 
     @database_sync_to_async
     def update_room_active_video(self, room_id, video_url):

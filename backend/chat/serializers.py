@@ -41,8 +41,9 @@ class PollOptionSerializer(serializers.ModelSerializer):
 
     def get_is_voted_by_me(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return obj.votes.filter(user=request.user).exists()
+        user = self.context.get('user') or (request.user if request and request.user.is_authenticated else None)
+        if user and user.is_authenticated:
+            return obj.votes.filter(user=user).exists()
         return False
 
     def get_percentage(self, obj):
@@ -80,8 +81,9 @@ class PollSerializer(serializers.ModelSerializer):
 
     def get_my_voted_option_ids(self, obj):
         request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return list(obj.votes.filter(user=request.user).values_list('option_id', flat=True))
+        user = self.context.get('user') or (request.user if request and request.user.is_authenticated else None)
+        if user and user.is_authenticated:
+            return list(obj.votes.filter(user=user).values_list('option_id', flat=True))
         return []
 
 

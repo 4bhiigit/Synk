@@ -159,7 +159,9 @@ SIMPLE_JWT = {
 
 # Channel Layers (Redis for production / fallback to InMemory for quick local testing)
 REDIS_URL = os.environ.get('REDIS_URL')
-if REDIS_URL:
+IS_RENDER_PROD = bool(os.environ.get('RENDER') or os.environ.get('ENVIRONMENT') == 'production')
+
+if REDIS_URL and IS_RENDER_PROD:
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
