@@ -1,10 +1,19 @@
 import axios from 'axios';
 
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : 'http://localhost:8000');
+const getApiUrl = () => {
+  let url = import.meta.env.VITE_API_URL;
+  if (url) return url.replace(/\/+$/, '');
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `${window.location.protocol}//${hostname}:8000`;
+    }
+    return 'https://synk-chat-backend.onrender.com';
+  }
+  return 'http://localhost:8000';
+};
+
+const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: API_URL,

@@ -1,11 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 const getWsBaseUrl = () => {
-  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  let url = import.meta.env.VITE_WS_URL;
+  if (!url && import.meta.env.VITE_API_URL) {
+    url = import.meta.env.VITE_API_URL.replace(/^http/i, 'ws');
+  }
+  if (url) {
+    url = url.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+    return url.replace(/\/+$/, '');
+  }
   if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname;
-    return `${protocol}//${hostname}:8000`;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return `ws://${hostname}:8000`;
+    }
+    return 'wss://synk-chat-backend.onrender.com';
   }
   return 'ws://localhost:8000';
 };
@@ -19,6 +28,7 @@ export const useChatSocket = (roomId, token) => {
 
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
   const pingIntervalRef = useRef(null);
   const typingTimerRef = useRef({});
   const shouldReconnectRef = useRef(true);
@@ -59,11 +69,14 @@ export const useChatSocket = (roomId, token) => {
     shouldReconnectRef.current = true;
 
     if (socketRef.current) {
-      socketRef.current.close();
+      try {
+        socketRef.current.close();
+      } catch (e) {}
     }
 
     setConnectionStatus('connecting');
-    const wsUrl = `${getWsBaseUrl()}/ws/chat/${roomId}/?token=${encodeURIComponent(effectiveToken)}`;
+    const wsBase = getWsBaseUrl();
+    const wsUrl = `${wsBase}/ws/chat/${roomId}/?token=${encodeURIComponent(effectiveToken)}`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -71,17 +84,18 @@ export const useChatSocket = (roomId, token) => {
 
       ws.onopen = () => {
         setConnectionStatus('connected');
+        reconnectAttemptsRef.current = 0;
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'video_state_request' }));
         }
 
-        // Heartbeat ping keepalive every 25 seconds
+        // Heartbeat ping keepalive every 12 seconds for Cloudflare/Render proxies
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = setInterval(() => {
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ping' }));
           }
-        }, 25000);
+        }, 12000);
       };
 
       ws.onmessage = (event) => {
@@ -311,9 +325,11 @@ export const useChatSocket = (roomId, token) => {
           if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
           }
+          const delay = Math.min(1000 * Math.pow(1.5, reconnectAttemptsRef.current), 5000);
+          reconnectAttemptsRef.current += 1;
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, 3000);
+          }, delay);
         }
       };
     } catch (err) {
