@@ -294,6 +294,29 @@ export const useChatSocket = (roomId, token) => {
               })
             );
           }
+
+          // 12. Poll Vote Update
+          else if (eventType === 'poll_vote_update') {
+            const { poll_id, poll } = payload;
+            if (poll) {
+              setMessages((prev) =>
+                prev.map((msg) => {
+                  if (msg.message_type === 'poll_card' && (msg.poll_data?.id === poll_id || msg.poll_data?.id === poll.id)) {
+                    return { ...msg, poll_data: poll };
+                  }
+                  return msg;
+                })
+              );
+            }
+          }
+
+          // 13. Pinned Messages Update
+          else if (eventType === 'pinned_messages_update') {
+            const { pinned_messages } = payload;
+            if (pinned_messages) {
+              setPinnedMessages(pinned_messages);
+            }
+          }
         } catch (err) {
           console.error('Failed to parse WebSocket message:', err);
         }

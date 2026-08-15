@@ -6,7 +6,8 @@ from django.core.files.base import ContentFile
 from django.db.models import Q, Sum
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -96,8 +97,27 @@ class CreatePollView(APIView):
         )
         msg.read_by.add(request.user)
 
+        serialized_msg = MessageSerializer(msg, context={'request': request}).data
+
+        # Broadcast real-time poll creation to all room members
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{room.id}',
+                    {
+                        'type': 'chat_message_handler',
+                        'data': {
+                            'type': 'message',
+                            'message': serialized_msg,
+                        }
+                    }
+                )
+        except Exception as e:
+            print("CreatePoll broadcast error:", e)
+
         return Response(
-            MessageSerializer(msg, context={'request': request}).data,
+            serialized_msg,
             status=status.HTTP_201_CREATED
         )
 
@@ -134,8 +154,28 @@ class VotePollView(APIView):
 
             PollVote.objects.create(poll=poll, option=option, user=request.user)
 
+        serialized_poll = PollSerializer(poll, context={'user': request.user}).data
+
+        # Broadcast live poll vote update to all room members
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{poll.room_id}',
+                    {
+                        'type': 'chat_poll_vote_handler',
+                        'data': {
+                            'type': 'poll_vote_update',
+                            'poll_id': str(poll.id),
+                            'poll': serialized_poll,
+                        }
+                    }
+                )
+        except Exception as e:
+            print("VotePoll broadcast error:", e)
+
         return Response(
-            PollSerializer(poll, context={'request': request}).data,
+            serialized_poll,
             status=status.HTTP_200_OK
         )
 
@@ -151,7 +191,26 @@ class ClosePollView(APIView):
         poll.is_closed = True
         poll.save(update_fields=['is_closed'])
 
-        return Response(PollSerializer(poll, context={'request': request}).data, status=status.HTTP_200_OK)
+        serialized_poll = PollSerializer(poll, context={'user': request.user}).data
+
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{poll.room_id}',
+                    {
+                        'type': 'chat_poll_vote_handler',
+                        'data': {
+                            'type': 'poll_vote_update',
+                            'poll_id': str(poll.id),
+                            'poll': serialized_poll,
+                        }
+                    }
+                )
+        except Exception as e:
+            print("ClosePoll broadcast error:", e)
+
+        return Response(serialized_poll, status=status.HTTP_200_OK)
 
 
 # ----------------------------------------------------
@@ -177,6 +236,23 @@ class PinMessageView(APIView):
         else:
             room.pinned_messages.add(msg)
             action = 'pinned'
+
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                pinned_list = [MessageSerializer(m, context={'request': request}).data for m in room.pinned_messages.all()]
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{room.id}',
+                    {
+                        'type': 'chat_pinned_message_handler',
+                        'data': {
+                            'type': 'pinned_messages_update',
+                            'pinned_messages': pinned_list,
+                        }
+                    }
+                )
+        except Exception as e:
+            print("PinMessage broadcast error:", e)
 
         return Response({
             'status': action,
