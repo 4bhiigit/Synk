@@ -360,6 +360,48 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 )
                 return
 
+            # Check for /watch or /party slash command
+            if content.lower().startswith('/watch ') or content.lower().startswith('/party '):
+                video_url_match = re.search(r'https?://[^\s]+', content)
+                url = video_url_match.group(0) if video_url_match else ''
+                yt_id_match = re.search(r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})', url)
+                vid_id = yt_id_match.group(1) if yt_id_match else None
+                watch_msg = await self.save_message(
+                    room_id=self.room_id,
+                    sender=self.user,
+                    content="📺 Watch Party Active: YouTube Video",
+                    media_url=url or None,
+                    message_type='watch_party_card',
+                    reply_to_id=reply_to_id
+                )
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_message_handler',
+                        'data': {
+                            'type': 'message',
+                            'message': watch_msg,
+                        }
+                    }
+                )
+                if url:
+                    await self.channel_layer.group_send(
+                        self.room_group_name,
+                        {
+                            'type': 'chat_video_handler',
+                            'sender_channel_name': self.channel_name,
+                            'data': {
+                                'type': 'video_load',
+                                'video_url': url,
+                                'video_id': vid_id,
+                                'title': 'YouTube Video',
+                                'sender_id': str(self.user.id),
+                                'sender_name': self.user.username,
+                            }
+                        }
+                    )
+                return
+
             # Save normal text / attachment / voice note / GIF / View Once
             message_data = await self.save_message(
                 room_id=self.room_id,
@@ -553,8 +595,33 @@ class ChatConsumer(AsyncWebsocketConsumer):
         elif event_type == 'video_load':
             video_url = payload.get('video_url')
             video_id = payload.get('video_id')
-            title = payload.get('title', '')
+            title = payload.get('title', '') or 'YouTube Video'
+            
+            # Save watch party card message to room history
+            watch_msg = await self.save_message(
+                room_id=self.room_id,
+                sender=self.user,
+                content=f"📺 Watch Party Active: {title}",
+                media_url=video_url,
+                message_type='watch_party_card',
+                reply_to_id=None
+            )
+
             await self.update_room_video_state(self.room_id, url=video_url, status='PLAYING', timestamp=0.0)
+
+            # Broadcast watch party card in chat stream
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_message_handler',
+                    'data': {
+                        'type': 'message',
+                        'message': watch_msg,
+                    }
+                }
+            )
+
+            # Broadcast real-time video load sync event
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {

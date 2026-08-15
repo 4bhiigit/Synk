@@ -20,6 +20,7 @@ import WebRTCCallModal from '../Calling/WebRTCCallModal';
 import PeekAndPopMenu from '../Apple/PeekAndPopMenu';
 import Loader from '../Common/Loader';
 import WatchTogetherModal from '../Collaborative/WatchTogetherModal';
+import WatchPartyCard from '../Collaborative/WatchPartyCard';
 import SharedWhiteboard from '../Collaborative/SharedWhiteboard';
 import GroupBalanceSheetModal from '../Collaborative/GroupBalanceSheetModal';
 import ExpenseCard from '../Collaborative/ExpenseCard';
@@ -289,6 +290,8 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
         actualMessageType = 'game_card';
       } else if (lower.startsWith('/split') || lower.startsWith('/expense')) {
         actualMessageType = 'expense_card';
+      } else if (lower.startsWith('/watch ') || lower.startsWith('/party ') || lower.startsWith('/yt ')) {
+        actualMessageType = 'watch_party_card';
       }
     }
 
@@ -971,6 +974,18 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
                     />
                     <span className="text-[10px] text-zinc-500 mt-1 px-1">{formatMessageTime(msg.timestamp)}</span>
                   </div>
+                ) : msg.message_type === 'watch_party_card' ? (
+                  <div id={`msg-${msg.id}`} className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'} my-2 transition-all`}>
+                    <WatchPartyCard
+                      message={msg}
+                      currentUserId={user?.id}
+                      onJoinWatchParty={(vid, url, title) => {
+                        setActiveWatchSession({ video_id: vid, video_url: url, title });
+                        setIsWatchModalOpen(true);
+                      }}
+                    />
+                    <span className="text-[10px] text-zinc-500 mt-1 px-1">{formatMessageTime(msg.timestamp)}</span>
+                  </div>
                 ) : (
                   /* Standard Message Bubble with iOS styling and 3D Touch Peek & Pop */
                   <div
@@ -1395,8 +1410,21 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
         activeVideoId={activeWatchSession?.video_id || activeWatchSession?.videoId}
         activeVideoUrl={activeWatchSession?.video_url || activeWatchSession?.videoUrl}
         onSendVideoLoad={(url, vid, title) => {
-          setActiveWatchSession({ video_id: vid, video_url: url, title });
+          const sessionData = { video_id: vid, video_url: url, title };
+          setActiveWatchSession(sessionData);
           sendVideoLoad(url, vid, title);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `opt_watch_${Date.now()}`,
+              sender: { id: user?.id, username: user?.username },
+              content: `📺 Watch Party Active: ${title}`,
+              media_url: url,
+              message_type: 'watch_party_card',
+              timestamp: new Date().toISOString(),
+              is_self: true,
+            },
+          ]);
         }}
         onSendVideoSync={sendVideoSync}
         subscribe={subscribe}
