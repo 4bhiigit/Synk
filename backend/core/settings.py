@@ -157,11 +157,11 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
-# Channel Layers (Redis for production / fallback to InMemory for quick local testing)
-REDIS_URL = os.environ.get('REDIS_URL')
-IS_RENDER_PROD = bool(os.environ.get('RENDER') or os.environ.get('ENVIRONMENT') == 'production')
+# Channel Layers (Upstash Redis Cloud for instant multi-client production sync)
+UPSTASH_REDIS_FALLBACK = 'rediss://default:gQAAAAAAAbJdAAIgcDFlZmM3NmMwNGJiMjg0YWY0ODI2N2Y3MzMzZTVjOTY3NA@dynamic-hound-111197.upstash.io:6379'
+REDIS_URL = os.environ.get('REDIS_URL', UPSTASH_REDIS_FALLBACK)
 
-if REDIS_URL and IS_RENDER_PROD:
+if REDIS_URL:
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',

@@ -2,9 +2,9 @@ import React from 'react';
 import { Tv, Play } from 'lucide-react';
 
 const extractYouTubeId = (url) => {
-  if (!url) return null;
-  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-  const match = String(url).match(regExp);
+  if (!url || typeof url !== 'string') return null;
+  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+  const match = String(url).trim().match(regExp);
   return match && match[1].length === 11 ? match[1] : null;
 };
 
