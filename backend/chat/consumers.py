@@ -634,6 +634,48 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     }
                 )
 
+        # 19. Watch Party Video Load
+        elif event_type == 'video_load':
+            video_url = payload.get('video_url')
+            video_id = payload.get('video_id')
+            title = payload.get('title', 'YouTube Video')
+            if video_id:
+                await self.update_room_active_video(self.room_id, video_url)
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_video_load_handler',
+                        'sender_channel_name': self.channel_name,
+                        'data': {
+                            'type': 'video_load',
+                            'video_url': video_url,
+                            'video_id': video_id,
+                            'title': title,
+                            'sender_id': str(self.user.id),
+                            'sender_name': self.user.username,
+                        }
+                    }
+                )
+
+        # 20. Watch Party Video Sync (Play, Pause, Seek)
+        elif event_type == 'video_sync':
+            action = payload.get('action')
+            current_time = payload.get('current_time', 0)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_video_sync_handler',
+                    'sender_channel_name': self.channel_name,
+                    'data': {
+                        'type': 'video_sync',
+                        'action': action,
+                        'current_time': current_time,
+                        'sender_id': str(self.user.id),
+                        'sender_name': self.user.username,
+                    }
+                }
+            )
+
     # Event Handlers
     async def chat_screenshare_handler(self, event):
         if event.get('sender_channel_name') != self.channel_name:
@@ -709,11 +751,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if event.get('sender_channel_name') != self.channel_name:
             await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
 
+    async def chat_video_load_handler(self, event):
+        await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
+
+    async def chat_video_sync_handler(self, event):
+        if event.get('sender_channel_name') != self.channel_name:
+            await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
+
     async def chat_canvas_handler(self, event):
         if event.get('sender_channel_name') != self.channel_name:
             await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
 
     # Database Operations
+    @database_sync_to_async
+    def update_room_active_video(self, room_id, video_url):
+        try:
+            ChatRoom.objects.filter(id=room_id).update(active_video_url=video_url)
+        except Exception:
+            pass
+
     @database_sync_to_async
     def check_room_membership(self, room_id, user):
         try:

@@ -96,9 +96,25 @@ export const useChatSocket = (roomId, token) => {
           if (eventType === 'message') {
             const newMsg = payload.message;
             setMessages((prev) => {
+              // Direct ID match
               if (prev.some((m) => m.id === newMsg.id)) {
                 return prev.map((m) => (m.id === newMsg.id ? newMsg : m));
               }
+
+              // Optimistic message replacement for fast UI
+              const optIndex = prev.findIndex(
+                (m) =>
+                  m.id?.toString().startsWith('temp_') &&
+                  m.content === newMsg.content &&
+                  (m.sender?.id === newMsg.sender?.id || m.sender?.username === newMsg.sender?.username)
+              );
+
+              if (optIndex !== -1) {
+                const nextList = [...prev];
+                nextList[optIndex] = newMsg;
+                return nextList;
+              }
+
               return [...prev, newMsg];
             });
 

@@ -266,6 +266,36 @@ export const ChatArea = ({ activeRoom, onBack, onMessageSent }) => {
 
   const handleSendMessage = (content, mediaUrl, replyToId, messageType = 'text', isViewOnce = false) => {
     playSentSound();
+
+    // ⚡ Optimistic UI Update: Render message instantly on screen (0ms latency!)
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const optimisticMsg = {
+      id: tempId,
+      temp_id: tempId,
+      content: content,
+      media_url: mediaUrl,
+      message_type: messageType,
+      is_view_once: isViewOnce,
+      created_at: new Date().toISOString(),
+      sender: {
+        id: user?.id,
+        username: user?.username,
+        display_name: user?.display_name || user?.username,
+        avatar_url: user?.avatar_url,
+      },
+      is_sender: true,
+      delivery_status: 'sending',
+      reactions: [],
+      reply_to: replyingTo
+        ? {
+            id: replyingTo.id,
+            content: replyingTo.content,
+            sender_name: replyingTo.sender?.username || 'User',
+          }
+        : null,
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
     sendMessage(content, mediaUrl, replyToId, messageType, isViewOnce);
     if (onMessageSent) onMessageSent();
   };
