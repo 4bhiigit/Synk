@@ -154,18 +154,30 @@ class StorySerializer(serializers.ModelSerializer):
 class CreateStorySerializer(serializers.ModelSerializer):
     excluded_user_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
     allowed_user_ids = serializers.ListField(child=serializers.UUIDField(), required=False)
+    caption = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Story
         fields = [
             'story_type',
             'content',
+            'caption',
             'media_url',
             'background_gradient',
             'privacy_type',
             'excluded_user_ids',
             'allowed_user_ids',
         ]
+        extra_kwargs = {
+            'content': {'required': False, 'allow_blank': True},
+            'media_url': {'required': False, 'allow_null': True},
+        }
+
+    def validate(self, attrs):
+        caption = attrs.pop('caption', None)
+        if not attrs.get('content') and caption:
+            attrs['content'] = caption
+        return attrs
 
 
 # ----------------------------------------------------

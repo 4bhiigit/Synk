@@ -28,6 +28,7 @@ from .views import (
 urlpatterns = [
     # 24-Hour Stories / Status
     path('stories/', StoryListCreateView.as_view(), name='chat_stories_list_create'),
+    path('stories/create/', StoryListCreateView.as_view(), name='chat_stories_create_direct'),
     path('stories/<uuid:story_id>/view/', StoryViewRecordView.as_view(), name='chat_story_view'),
     path('stories/<uuid:story_id>/', StoryDeleteView.as_view(), name='chat_story_delete'),
 
@@ -37,6 +38,7 @@ urlpatterns = [
 
     # Interactive Polls
     path('rooms/<uuid:room_id>/polls/', CreatePollView.as_view(), name='chat_create_poll'),
+    path('polls/create/', CreatePollView.as_view(), name='chat_create_poll_direct'),
     path('polls/<uuid:poll_id>/vote/', VotePollView.as_view(), name='chat_vote_poll'),
     path('polls/<uuid:poll_id>/close/', ClosePollView.as_view(), name='chat_close_poll'),
 

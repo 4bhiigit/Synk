@@ -63,30 +63,40 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class LoginSerializer(serializers.Serializer):
     """Serializer for user login supporting both username or email authentication."""
-    username_or_email = serializers.CharField(required=True)
+    username_or_email = serializers.CharField(required=False)
+    username = serializers.CharField(required=False)
+    email = serializers.CharField(required=False)
     password = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
-        username_or_email = attrs.get('username_or_email', '').strip()
+        identifier = (
+            attrs.get('username_or_email') or
+            attrs.get('username') or
+            attrs.get('email') or
+            ''
+        ).strip()
         password = attrs.get('password', '')
+
+        if not identifier:
+            raise serializers.ValidationError("Username or email is required.")
 
         user = None
 
         # 1. Try finding by email (case-insensitive)
-        if '@' in username_or_email:
-            user_obj = User.objects.filter(email__iexact=username_or_email).first()
+        if '@' in identifier:
+            user_obj = User.objects.filter(email__iexact=identifier).first()
             if user_obj and user_obj.check_password(password):
                 user = user_obj
 
         # 2. Try finding by username (case-insensitive) if not already found
         if not user:
-            user_obj = User.objects.filter(username__iexact=username_or_email).first()
+            user_obj = User.objects.filter(username__iexact=identifier).first()
             if user_obj and user_obj.check_password(password):
                 user = user_obj
 
         # 3. Fallback to standard Django authenticate
         if not user:
-            user = authenticate(username=username_or_email, password=password)
+            user = authenticate(username=identifier, password=password)
 
         if not user:
             raise serializers.ValidationError("Invalid credentials. Please check your username/email and password.")

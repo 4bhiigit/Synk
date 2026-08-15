@@ -59,8 +59,12 @@ class CreatePollView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, room_id, *args, **kwargs):
-        room = get_object_or_404(ChatRoom, id=room_id)
+    def post(self, request, room_id=None, *args, **kwargs):
+        target_room_id = room_id or request.data.get('room_id')
+        if not target_room_id:
+            return Response({'error': 'room_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        room = get_object_or_404(ChatRoom, id=target_room_id)
         if not room.members.filter(id=request.user.id).exists():
             raise PermissionDenied("You are not a member of this room.")
 

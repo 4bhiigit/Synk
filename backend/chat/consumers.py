@@ -676,6 +676,76 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
 
+        # 21. Real-Time Message Reactions
+        elif event_type == 'message_reaction':
+            message_id = payload.get('message_id')
+            emoji = payload.get('emoji', '❤️')
+            reaction_data = await self.toggle_message_reaction(message_id, self.user, emoji)
+            if reaction_data is not None:
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'chat_reaction_handler',
+                        'data': {
+                            'type': 'message_reaction_update',
+                            'message_id': str(message_id),
+                            'reactions': reaction_data,
+                            'sender_id': str(self.user.id),
+                        }
+                    }
+                )
+
+        # 22. Synced Music Lounge
+        elif event_type == 'music_change_track':
+            track = payload.get('track')
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_music_handler',
+                    'sender_channel_name': self.channel_name,
+                    'data': {
+                        'type': 'music_change_track',
+                        'track': track,
+                        'sender_id': str(self.user.id),
+                        'sender_name': self.user.username,
+                    }
+                }
+            )
+
+        elif event_type == 'music_sync_action':
+            action = payload.get('action')
+            current_time = payload.get('current_time', 0.0)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_music_handler',
+                    'sender_channel_name': self.channel_name,
+                    'data': {
+                        'type': 'music_sync_action',
+                        'action': action,
+                        'current_time': current_time,
+                        'sender_id': str(self.user.id),
+                        'sender_name': self.user.username,
+                    }
+                }
+            )
+
+        elif event_type == 'music_queue_update':
+            queue = payload.get('queue', [])
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_music_handler',
+                    'sender_channel_name': self.channel_name,
+                    'data': {
+                        'type': 'music_queue_update',
+                        'queue': queue,
+                        'sender_id': str(self.user.id),
+                        'sender_name': self.user.username,
+                    }
+                }
+            )
+
     # Event Handlers
     async def chat_screenshare_handler(self, event):
         if event.get('sender_channel_name') != self.channel_name:
@@ -758,11 +828,39 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if event.get('sender_channel_name') != self.channel_name:
             await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
 
+    async def chat_reaction_handler(self, event):
+        await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
+
     async def chat_canvas_handler(self, event):
         if event.get('sender_channel_name') != self.channel_name:
             await self.send(text_data=json.dumps(event['data'], cls=DjangoJSONEncoder))
 
     # Database Operations
+    @database_sync_to_async
+    def toggle_message_reaction(self, message_id, user, emoji):
+        try:
+            user_obj = User.objects.get(id=user.id)
+            msg = Message.objects.get(id=message_id)
+            existing = MessageReaction.objects.filter(message=msg, user=user_obj).first()
+            if existing:
+                if existing.emoji == emoji:
+                    existing.delete()
+                else:
+                    existing.emoji = emoji
+                    existing.save(update_fields=['emoji'])
+            else:
+                MessageReaction.objects.create(message=msg, user=user_obj, emoji=emoji)
+
+            reactions_dict = {}
+            for r in MessageReaction.objects.filter(message=msg).values('emoji'):
+                em = r['emoji']
+                reactions_dict[em] = reactions_dict.get(em, 0) + 1
+            return reactions_dict
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return None
+
     @database_sync_to_async
     def update_room_active_video(self, room_id, video_url):
         try:
