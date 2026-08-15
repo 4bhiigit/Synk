@@ -62,6 +62,27 @@ export const SharedWhiteboard = ({
 
   const allStrokesRef = useRef([]);
 
+  // Render a stroke on canvas with automatic coordinate scaling
+  const renderStroke = useCallback((stroke) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    let x1 = stroke.prevX;
+    let y1 = stroke.prevY;
+    let x2 = stroke.currX;
+    let y2 = stroke.currY;
+
+    if (stroke.nx1 !== undefined && stroke.ny1 !== undefined && stroke.nx2 !== undefined && stroke.ny2 !== undefined) {
+      x1 = stroke.nx1 * rect.width;
+      y1 = stroke.ny1 * rect.height;
+      x2 = stroke.nx2 * rect.width;
+      y2 = stroke.ny2 * rect.height;
+    }
+
+    drawSegment(x1, y1, x2, y2, stroke.color, stroke.width, stroke.isEraser);
+  }, [drawSegment]);
+
   // Initialize Canvas context and replay strokes
   useEffect(() => {
     if (!isOpen) return;
@@ -80,27 +101,19 @@ export const SharedWhiteboard = ({
       ctx.lineJoin = 'round';
       contextRef.current = ctx;
 
-      // Replay all strokes
+      // Replay all buffered strokes
       if (allStrokesRef.current && allStrokesRef.current.length > 0) {
         allStrokesRef.current.forEach((stroke) => {
-          drawSegment(
-            stroke.prevX,
-            stroke.prevY,
-            stroke.currX,
-            stroke.currY,
-            stroke.color,
-            stroke.width,
-            stroke.isEraser
-          );
+          renderStroke(stroke);
         });
       }
 
       const dataUrl = canvas.toDataURL();
       setHistory([dataUrl]);
-    }, 50);
+    }, 40);
 
     return () => clearTimeout(timer);
-  }, [isOpen, drawSegment]);
+  }, [isOpen, renderStroke]);
 
   const saveToHistory = () => {
     const canvas = canvasRef.current;
@@ -111,15 +124,16 @@ export const SharedWhiteboard = ({
 
   const flushStrokes = useCallback(() => {
     if (strokeBufferRef.current.length > 0) {
-      allStrokesRef.current.push(...strokeBufferRef.current);
-      onSendCanvasDraw([...strokeBufferRef.current]);
+      const bufferCopy = [...strokeBufferRef.current];
+      allStrokesRef.current.push(...bufferCopy);
+      onSendCanvasDraw(bufferCopy);
       strokeBufferRef.current = [];
     }
   }, [onSendCanvasDraw]);
 
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
+    if (!canvas) return { x: 0, y: 0, width: 1, height: 1 };
     const rect = canvas.getBoundingClientRect();
 
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -128,6 +142,8 @@ export const SharedWhiteboard = ({
     return {
       x: clientX - rect.left,
       y: clientY - rect.top,
+      width: rect.width || 1,
+      height: rect.height || 1,
     };
   };
 
@@ -137,13 +153,13 @@ export const SharedWhiteboard = ({
     isDrawingRef.current = true;
 
     if (!throttleTimerRef.current) {
-      throttleTimerRef.current = setInterval(flushStrokes, 40);
+      throttleTimerRef.current = setInterval(flushStrokes, 35);
     }
   };
 
   const draw = (e) => {
     if (!isDrawingRef.current) return;
-    const { x, y } = getCoordinates(e);
+    const { x, y, width, height } = getCoordinates(e);
     const isEraser = activeTool === 'eraser';
 
     drawSegment(
@@ -161,6 +177,10 @@ export const SharedWhiteboard = ({
       prevY: lastPosRef.current.y,
       currX: x,
       currY: y,
+      nx1: lastPosRef.current.x / width,
+      ny1: lastPosRef.current.y / height,
+      nx2: x / width,
+      ny2: y / height,
       color: color,
       width: lineWidth,
       isEraser: isEraser,
@@ -225,7 +245,7 @@ export const SharedWhiteboard = ({
     a.click();
   };
 
-  // Direct socket event listeners (Draws directly on canvas without React state overhead!)
+  // Direct socket event listeners
   useEffect(() => {
     if (!subscribe) return;
 
@@ -233,15 +253,7 @@ export const SharedWhiteboard = ({
       const strokes = payload.strokes || [];
       allStrokesRef.current.push(...strokes);
       strokes.forEach((stroke) => {
-        drawSegment(
-          stroke.prevX,
-          stroke.prevY,
-          stroke.currX,
-          stroke.currY,
-          stroke.color,
-          stroke.width,
-          stroke.isEraser
-        );
+        renderStroke(stroke);
       });
     });
 
@@ -258,7 +270,7 @@ export const SharedWhiteboard = ({
       unsubDraw();
       unsubClear();
     };
-  }, [subscribe, drawSegment]);
+  }, [subscribe, renderStroke]);
 
   if (!isOpen) return null;
 
