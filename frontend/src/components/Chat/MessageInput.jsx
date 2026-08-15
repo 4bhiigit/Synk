@@ -614,7 +614,7 @@ export const MessageInput = ({
   }
 
   return (
-    <div className="p-3 md:p-4 bg-[#0d0d10] border-t border-white/10 relative select-none">
+    <div className="p-2.5 sm:p-3 md:p-4 bg-[#0d0d10] border-t border-white/10 relative select-none flex-shrink-0 z-20 pb-[max(env(safe-area-inset-bottom),0.65rem)]">
       {/* Hidden Native File Inputs */}
       <input
         type="file"
@@ -1085,7 +1085,7 @@ export const MessageInput = ({
         </div>
       ) : (
         /* Regular Message Input Form */
-        <form onSubmit={handleSend} className="flex items-center gap-2">
+        <form onSubmit={handleSend} className="flex items-center gap-1.5 sm:gap-2">
           {/* Action Menu / Dropdown Trigger (+) */}
           <button
             type="button"
@@ -1094,7 +1094,7 @@ export const MessageInput = ({
               setShowPicker(false);
               setShowSlashMenu(false);
             }}
-            className={`btn-icon p-2.5 transition-all ${
+            className={`btn-icon p-2 sm:p-2.5 flex-shrink-0 transition-all ${
               showActionsMenu ? 'bg-white text-black rotate-45' : 'hover:text-white'
             }`}
             title="Attachments & Actions Menu"
@@ -1110,14 +1110,14 @@ export const MessageInput = ({
               setShowActionsMenu(false);
               setShowSlashMenu(false);
             }}
-            className={`btn-icon p-2.5 ${showPicker ? 'bg-white text-black' : ''}`}
+            className={`btn-icon p-2 sm:p-2.5 flex-shrink-0 ${showPicker ? 'bg-white text-black' : ''}`}
             title="Emojis, GIFs & Stickers"
           >
             <Smile className="w-4 h-4" />
           </button>
 
           {/* Message Input */}
-          <div className="flex-1 relative">
+          <div className="flex-1 min-w-0 relative">
             <input
               ref={inputRef}
               type="text"
@@ -1133,9 +1133,9 @@ export const MessageInput = ({
                   ? 'Edit message content...'
                   : replyingTo
                   ? `Reply to ${replyingTo.sender?.username || replyingTo.sender_username || 'message'}...`
-                  : "Type message, /poll, /play song, or '/' for commands..."
+                  : "Type a message..."
               }
-              className="w-full py-2.5 px-4 rounded-xl glass-input text-xs md:text-sm focus:outline-none placeholder-zinc-500"
+              className="w-full py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl glass-input text-xs sm:text-sm focus:outline-none placeholder-zinc-500"
             />
           </div>
 
@@ -1144,7 +1144,7 @@ export const MessageInput = ({
             <button
               type="submit"
               disabled={disabled || isUploading}
-              className="btn-primary p-2.5 flex items-center justify-center flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed shadow-md"
+              className="btn-primary p-2 sm:p-2.5 flex items-center justify-center flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed shadow-md active:scale-95 transition-all"
               title={editingMessage ? 'Save Changes' : 'Send message'}
             >
               {isUploading ? (
@@ -1160,7 +1160,7 @@ export const MessageInput = ({
               type="button"
               onClick={startRecording}
               disabled={disabled || isUploading}
-              className="btn-icon p-2.5 hover:text-white hover:bg-rose-500/20 hover:border-rose-500/30 transition-colors"
+              className="btn-icon p-2 sm:p-2.5 hover:text-white hover:bg-rose-500/20 hover:border-rose-500/30 flex-shrink-0 transition-colors active:scale-95"
               title="Record Voice Note"
             >
               <Mic className="w-4 h-4 text-zinc-300" />

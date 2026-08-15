@@ -65,13 +65,13 @@ export const DashboardPage = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex bg-[#0b0f19] overflow-hidden">
+    <div className="h-[100dvh] max-h-[100dvh] w-screen flex bg-[#0b0f19] overflow-hidden fixed inset-0 overscroll-none">
       {/* 2-Column Responsive Layout */}
       {/* Left Column (Sidebar) */}
       <div
         className={`${
           activeRoom ? 'hidden md:flex' : 'flex'
-        } w-full md:w-auto h-full flex-shrink-0`}
+        } w-full md:w-80 lg:w-96 h-full max-h-full flex-shrink-0 flex-col overflow-hidden`}
       >
         <Sidebar
           rooms={rooms}
@@ -86,7 +86,7 @@ export const DashboardPage = () => {
       <div
         className={`${
           !activeRoom ? 'hidden md:flex' : 'flex'
-        } flex-1 h-full flex-col min-w-0`}
+        } flex-1 h-full max-h-full min-h-0 flex-col min-w-0 overflow-hidden`}
       >
         <ChatArea
           activeRoom={activeRoom}
